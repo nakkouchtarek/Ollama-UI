@@ -484,6 +484,65 @@
             opacity: 1;
             transform: translateY(0);
         }
+
+        /* Context toggle styles */
+        .context-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .context-toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .context-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .context-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #565869;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .context-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .context-slider {
+            background-color: #10a37f;
+        }
+
+        input:checked + .context-slider:before {
+            transform: translateX(20px);
+        }
+
+        .context-info {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-left: 0.25rem;
+        }
     </style>
 <link rel="icon" type="image/x-icon" href="./icon.png">
 </head>
@@ -523,6 +582,17 @@
                     <option value="">Loading models...</option>
                 </select>
                 <button class="control-btn" onclick="window.chat && window.chat.refreshModels()">Refresh Models</button>
+                
+                <!-- Context toggle -->
+                <div class="context-toggle-container">
+                    <span>Full Context:</span>
+                    <label class="context-toggle">
+                        <input type="checkbox" id="contextToggle">
+                        <span class="context-slider"></span>
+                    </label>
+                    <span class="context-info" id="contextInfo">Off</span>
+                </div>
+                
                 <button class="control-btn" onclick="window.chat && window.chat.exportConversation()">Export</button>
                 <div class="status">
                     <div class="status-dot" id="statusDot"></div>
@@ -558,7 +628,7 @@
     </div>
 
     <script>
-        class OllamaChat {
+        class SecureOllamaChat {
             constructor() {
                 this.messages = document.getElementById('messages');
                 this.userInput = document.getElementById('userInput');
@@ -569,10 +639,13 @@
                 this.sidebar = document.getElementById('sidebar');
                 this.conversationsList = document.getElementById('conversationsList');
                 this.saveIndicator = document.getElementById('saveIndicator');
+                this.contextToggle = document.getElementById('contextToggle');
+                this.contextInfo = document.getElementById('contextInfo');
                 
                 this.model = 'mistral:7b-instruct-q4_K_M';
                 this.ollamaUrl = 'http://localhost:11434';
                 this.availableModels = [];
+                this.useFullContext = false;
                 
                 // Conversation management
                 this.conversations = {};
@@ -601,6 +674,14 @@
                         this.autoSave();
                     }
                 });
+                
+                // Add context toggle listener
+                this.contextToggle.addEventListener('change', (e) => {
+                    this.useFullContext = e.target.checked;
+                    this.contextInfo.textContent = this.useFullContext ? 'On' : 'Off';
+                    this.addSystemMessage(`🔄 Context mode: ${this.useFullContext ? 'Full conversation context enabled' : 'Single message mode enabled'}`);
+                    this.autoSave();
+                });
             }
             
             setupInputAutoResize() {
@@ -621,6 +702,35 @@
             autoSave() {
                 this.saveCurrentConversation();
                 //this.showSaveIndicator();
+            }
+
+            // Build context messages for full context mode
+            buildContextMessages(currentMessage) {
+                if (!this.useFullContext || !this.currentConversationId) {
+                    return currentMessage;
+                }
+                
+                const conversation = this.conversations[this.currentConversationId];
+                if (!conversation || conversation.messages.length === 0) {
+                    return currentMessage;
+                }
+                
+                // Build conversation history (exclude system messages)
+                let contextPrompt = "Previous conversation:\n";
+                
+                conversation.messages
+                    .filter(msg => msg.role !== 'system')
+                    .forEach(msg => {
+                        if (msg.role === 'user') {
+                            contextPrompt += `Human: ${msg.content}\n`;
+                        } else if (msg.role === 'assistant') {
+                            contextPrompt += `Assistant: ${msg.content}\n`;
+                        }
+                    });
+                
+                contextPrompt += `\nHuman: ${currentMessage}\nAssistant:`;
+                
+                return contextPrompt;
             }
             
             // Conversation Management
@@ -706,7 +816,8 @@
                 const data = {
                     conversations: this.conversations,
                     currentConversationId: this.currentConversationId,
-                    lastModel: this.model
+                    lastModel: this.model,
+                    useFullContext: this.useFullContext
                 };
                 
                 // Save to localStorage
@@ -728,6 +839,11 @@
                         this.conversations = data.conversations || {};
                         this.currentConversationId = data.currentConversationId;
                         this.model = data.lastModel || this.model;
+                        this.useFullContext = data.useFullContext || false;
+                        
+                        // Update UI
+                        this.contextToggle.checked = this.useFullContext;
+                        this.contextInfo.textContent = this.useFullContext ? 'On' : 'Off';
                         
                         if (this.currentConversationId && this.conversations[this.currentConversationId]) {
                             this.renderMessages();
@@ -744,6 +860,11 @@
                     this.conversations = this.savedData.conversations || {};
                     this.currentConversationId = this.savedData.currentConversationId;
                     this.model = this.savedData.lastModel || this.model;
+                    this.useFullContext = this.savedData.useFullContext || false;
+                    
+                    // Update UI
+                    this.contextToggle.checked = this.useFullContext;
+                    this.contextInfo.textContent = this.useFullContext ? 'On' : 'Off';
                     
                     if (this.currentConversationId && this.conversations[this.currentConversationId]) {
                         this.renderMessages();
@@ -1044,7 +1165,11 @@
                 this.showTypingIndicator();
                 
                 try {
-                    console.log(`Sending message to model: ${this.model}`);
+                    console.log(`Sending message to model: ${this.model} (Full Context: ${this.useFullContext})`);
+                    
+                    // Build the prompt based on context mode
+                    const prompt = this.buildContextMessages(message);
+                    
                     const response = await fetch(`${this.ollamaUrl}/api/generate`, {
                         method: 'POST',
                         headers: {
@@ -1052,7 +1177,7 @@
                         },
                         body: JSON.stringify({
                             model: this.model,
-                            prompt: message,
+                            prompt: prompt,
                             stream: false,
                             options: {
                                 temperature: 0.7,
@@ -1190,7 +1315,7 @@
         // Initialize when page loads
         let chat;
         document.addEventListener('DOMContentLoaded', () => {
-            chat = new OllamaChat();
+            chat = new SecureOllamaChat();
             // Make chat available globally for button clicks
             window.chat = chat;
         });
