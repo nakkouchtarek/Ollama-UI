@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local GPT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #212121;
+            color: #ececf1;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        /* Sidebar Styles */
+        .sidebar {
+            width: 300px;
+            background: #171717;
+            border-right: 1px solid #4a4a4a;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        .sidebar.collapsed {
+            width: 0;
+            overflow: hidden;
+        }
+        
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid #4a4a4a;
+            flex-shrink: 0;
+        }
+        
+        .new-chat-btn {
+            width: 100%;
+            background: #10a37f;
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        
+        .new-chat-btn:hover {
+            background: #0d8a6a;
+        }
+        
+        .conversations-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 0.5rem;
+        }
+        
+        .conversation-item {
+            padding: 0.75rem;
+            margin: 0.25rem 0;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            group: conversation;
+        }
+        
+        .conversation-item:hover {
+            background: #2a2a2a;
+        }
+        
+        .conversation-item.active {
+            background: #10a37f;
+            color: white;
+        }
+        
+        .conversation-title {
+            font-size: 0.875rem;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .conversation-actions {
+            display: flex;
+            gap: 0.25rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .conversation-item:hover .conversation-actions {
+            opacity: 1;
+        }
+        
+        .action-btn {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: transparent;
+            color: #ececf1;
+            cursor: pointer;
+            border-radius: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .conversation-item.active .action-btn {
+            color: white;
+        }
+        
+        /* Main Content Styles */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        
+        .header {
+            background: #2f2f2f;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #4a4a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .sidebar-toggle {
+            background: transparent;
+            border: 1px solid #565869;
+            color: #ececf1;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .sidebar-toggle:hover {
+            background: #40414f;
+        }
+        
+        .title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #ececf1;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+        }
+        
+        .status-dot.connected {
+            background: #10b981;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+            min-height: 0;
+        }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .message-wrapper {
+            display: flex;
+            gap: 1rem;
+            max-width: 100%;
+        }
+        
+        .message-wrapper.user {
+            justify-content: flex-end;
+            padding-right: 1rem;
+        }
+        
+        .message-wrapper.assistant {
+            justify-content: flex-start;
+            padding-left: 1rem;
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        
+        .avatar.user {
+            background: #10a37f;
+            color: white;
+        }
+        
+        .avatar.assistant {
+            background: #6366f1;
+            color: white;
+        }
+        
+        .message-content {
+            background: #343541;
+            padding: 1rem 1.25rem;
+            border-radius: 1rem;
+            border: 1px solid #565869;
+            max-width: 70%;
+            word-wrap: break-word;
+            line-height: 1.5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        
+        .message-wrapper.user .message-content {
+            background: #10a37f;
+            color: white;
+            border-color: #10a37f;
+        }
+        
+        .system-message {
+            background: #10b981;
+            border: 1px solid #059669;
+            color: #000000;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .input-area {
+            padding: 1rem 2rem 2rem;
+            background: #2f2f2f;
+            border-top: 1px solid #4a4a4a;
+            flex-shrink: 0;
+        }
+        
+        .input-container {
+            display: flex;
+            align-items: flex-end;
+            gap: 0.75rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #40414f;
+            border: 1px solid #565869;
+            border-radius: 1rem;
+            padding: 0.5rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .input-box {
+            flex: 1;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: inherit;
+            font-size: 1rem;
+            padding: 0.75rem;
+            max-height: 200px;
+            min-height: 24px;
+            line-height: 1.5;
+            background: transparent;
+            color: #ececf1;
+        }
+        
+        .send-btn {
+            background: #10a37f;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .send-btn:hover:not(:disabled) {
+            background: #0d8a6a;
+        }
+        
+        .send-btn:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+        }
+        
+        .send-icon {
+            width: 20px;
+            height: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+        
+        .control-btn {
+            background: #40414f;
+            border: 1px solid #565869;
+            color: #ececf1;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background-color 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: #565869;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            border: 1px solid #4a4a4a;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+            color: #e5e5e5;
+        }
+        
+        code {
+            background: #3a3a3a;
+            color: #e5e5e5;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #6b7280;
+            font-style: italic;
+        }
+        
+        .typing-dots {
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            justify-content: center;
+            min-height: 20px;
+        }
+        
+        .typing-dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #6b7280;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+        
+        /* Empty state */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #9ca3af;
+            padding: 2rem;
+        }
+        
+        .empty-state h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #ececf1;
+        }
+        
+        .empty-state p {
+            font-size: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                z-index: 10;
+                height: 100vh;
+            }
+            
+            .sidebar.collapsed {
+                width: 0;
+            }
+        }
+
+        /* Auto-save indicator */
+        .save-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .save-indicator.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+<link rel="icon" type="image/x-icon" href="./icon.png">
+</head>
+<body>
+    <!-- Auto-save indicator -->
+    <div class="save-indicator" id="saveIndicator">💾 Saved</div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" onclick="window.chat && window.chat.newConversation()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                New Chat
+            </button>
+        </div>
+        
+        <div class="conversations-list" id="conversationsList">
+            <!-- Conversations will be populated here -->
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="header">
+            <div class="header-left">
+                <button class="sidebar-toggle" onclick="window.chat && window.chat.toggleSidebar()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12h18M3 6h18M3 18h18"/>
+                    </svg>
+                </button>
+                <div class="title">Local GPT</div>
+            </div>
+            <div class="controls">
+                <select id="modelSelect" class="control-btn" style="min-width: 150px;">
+                    <option value="">Loading models...</option>
+                </select>
+                <button class="control-btn" onclick="window.chat && window.chat.refreshModels()">Refresh Models</button>
+                <button class="control-btn" onclick="window.chat && window.chat.exportConversation()">Export</button>
+                <div class="status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="status">Connecting...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="empty-state">
+                    <h2>Welcome to Local GPT</h2>
+                    <p>Start a new conversation or select an existing one from the sidebar</p>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea 
+                        id="userInput" 
+                        class="input-box" 
+                        placeholder="Message Ollama..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        <svg class="send-icon" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SecureOllamaChat {
+            constructor() {
+                this.messages = document.getElementById('messages');
+                this.userInput = document.getElementById('userInput');
+                this.sendBtn = document.getElementById('sendBtn');
+                this.status = document.getElementById('status');
+                this.statusDot = document.getElementById('statusDot');
+                this.modelSelect = document.getElementById('modelSelect');
+                this.sidebar = document.getElementById('sidebar');
+                this.conversationsList = document.getElementById('conversationsList');
+                this.saveIndicator = document.getElementById('saveIndicator');
+                
+                this.model = 'mistral:7b-instruct-q4_K_M';
+                this.ollamaUrl = 'http://localhost:11434';
+                this.availableModels = [];
+                
+                // Conversation management
+                this.conversations = {};
+                this.currentConversationId = null;
+                this.conversationCounter = 1;
+                
+                this.initEventListeners();
+                this.checkConnection();
+                this.setupInputAutoResize();
+                this.loadConversations();
+                //this.newConversation();
+            }
+            
+            initEventListeners() {
+                this.sendBtn.addEventListener('click', () => this.sendMessage());
+                this.userInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+                this.modelSelect.addEventListener('change', (e) => {
+                    this.model = e.target.value;
+                    if (this.model) {
+                        this.addSystemMessage(`🔄 Switched to model: ${this.model}`);
+                        this.autoSave();
+                    }
+                });
+            }
+            
+            setupInputAutoResize() {
+                this.userInput.addEventListener('input', () => {
+                    this.userInput.style.height = 'auto';
+                    this.userInput.style.height = Math.min(this.userInput.scrollHeight, 200) + 'px';
+                });
+            }
+
+            // Auto-save functionality
+            showSaveIndicator() {
+                this.saveIndicator.classList.add('show');
+                setTimeout(() => {
+                    this.saveIndicator.classList.remove('show');
+                }, 2000);
+            }
+
+            autoSave() {
+                this.saveCurrentConversation();
+                //this.showSaveIndicator();
+            }
+            
+            // Conversation Management
+            newConversation() {
+                const id = `conv_${Date.now()}_${this.conversationCounter++}`;
+                const conversation = {
+                    id: id,
+                    title: 'New Chat',
+                    messages: [],
+                    model: this.model,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                this.conversations[id] = conversation;
+                this.currentConversationId = id;
+                
+                this.renderMessages();
+                this.renderConversationsList();
+                this.saveConversations();
+                
+                // Show welcome message for new conversations
+                this.showEmptyState();
+            }
+            
+            switchConversation(id) {
+                if (this.currentConversationId) {
+                    this.saveCurrentConversation();
+                }
+                
+                this.currentConversationId = id;
+                this.renderMessages();
+                this.renderConversationsList();
+                
+                // Switch model if different
+                const conversation = this.conversations[id];
+                if (conversation.model && conversation.model !== this.model) {
+                    this.model = conversation.model;
+                    this.modelSelect.value = this.model;
+                }
+            }
+            
+            deleteConversation(id) {
+                if (confirm('Are you sure you want to delete this conversation?')) {
+                    delete this.conversations[id];
+                    
+                    if (this.currentConversationId === id) {
+                        // Switch to another conversation or create new one
+                        const remainingIds = Object.keys(this.conversations);
+                        if (remainingIds.length > 0) {
+                            this.switchConversation(remainingIds[0]);
+                        } else {
+                            this.newConversation();
+                        }
+                    }
+                    
+                    this.renderConversationsList();
+                    this.saveConversations();
+                }
+            }
+            
+            renameConversation(id, newTitle) {
+                if (this.conversations[id]) {
+                    this.conversations[id].title = newTitle;
+                    this.conversations[id].updatedAt = new Date().toISOString();
+                    this.renderConversationsList();
+                    this.saveConversations();
+                }
+            }
+            
+            saveCurrentConversation() {
+                if (!this.currentConversationId) return;
+                
+                const conversation = this.conversations[this.currentConversationId];
+                if (conversation) {
+                    conversation.updatedAt = new Date().toISOString();
+                    conversation.model = this.model;
+                    this.saveConversations();
+                }
+            }
+            
+            saveConversations() {
+                const data = {
+                    conversations: this.conversations,
+                    currentConversationId: this.currentConversationId,
+                    lastModel: this.model
+                };
+                
+                // Save to localStorage
+                try {
+                    localStorage.setItem('ollamaChat_conversations', JSON.stringify(data));
+                } catch (error) {
+                    console.error('Failed to save to localStorage:', error);
+                    // Fallback to in-memory storage
+                    this.savedData = data;
+                }
+            }
+            
+            loadConversations() {
+                try {
+                    // Try to load from localStorage first
+                    const savedData = localStorage.getItem('ollamaChat_conversations');
+                    if (savedData) {
+                        const data = JSON.parse(savedData);
+                        this.conversations = data.conversations || {};
+                        this.currentConversationId = data.currentConversationId;
+                        this.model = data.lastModel || this.model;
+                        
+                        if (this.currentConversationId && this.conversations[this.currentConversationId]) {
+                            this.renderMessages();
+                            this.renderConversationsList();
+                        }
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Failed to load from localStorage:', error);
+                }
+                
+                // Fallback to in-memory storage
+                if (this.savedData) {
+                    this.conversations = this.savedData.conversations || {};
+                    this.currentConversationId = this.savedData.currentConversationId;
+                    this.model = this.savedData.lastModel || this.model;
+                    
+                    if (this.currentConversationId && this.conversations[this.currentConversationId]) {
+                        this.renderMessages();
+                        this.renderConversationsList();
+                    }
+                }
+            }
+            
+            renderConversationsList() {
+                this.conversationsList.innerHTML = '';
+                
+                const sortedConversations = Object.values(this.conversations)
+                    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+                
+                sortedConversations.forEach(conversation => {
+                    const item = document.createElement('div');
+                    item.className = `conversation-item ${conversation.id === this.currentConversationId ? 'active' : ''}`;
+                    
+                    item.innerHTML = `
+                        <div class="conversation-title" title="${conversation.title}">${conversation.title}</div>
+                        <div class="conversation-actions">
+                            <button class="action-btn" onclick="window.chat.renameConversationPrompt('${conversation.id}')" title="Rename">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                    <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
+                            <button class="action-btn" onclick="window.chat.deleteConversation('${conversation.id}')" title="Delete">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14ZM10 11v6M14 11v6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    
+                    item.addEventListener('click', (e) => {
+                        if (!e.target.closest('.conversation-actions')) {
+                            this.switchConversation(conversation.id);
+                        }
+                    });
+                    
+                    this.conversationsList.appendChild(item);
+                });
+            }
+            
+            renameConversationPrompt(id) {
+                const conversation = this.conversations[id];
+                if (conversation) {
+                    const newTitle = prompt('Enter new conversation title:', conversation.title);
+                    if (newTitle && newTitle.trim()) {
+                        this.renameConversation(id, newTitle.trim());
+                    }
+                }
+            }
+            
+            toggleSidebar() {
+                this.sidebar.classList.toggle('collapsed');
+            }
+            
+            showEmptyState() {
+                this.messages.innerHTML = `
+                    <div class="empty-state">
+                        <h2>Welcome to Local GPT</h2>
+                        <p>Start typing your message below to begin the conversation</p>
+                    </div>
+                `;
+            }
+            
+            renderMessages() {
+                this.messages.innerHTML = '';
+                
+                if (!this.currentConversationId) {
+                    this.showEmptyState();
+                    return;
+                }
+                
+                const conversation = this.conversations[this.currentConversationId];
+                if (!conversation || conversation.messages.length === 0) {
+                    this.showEmptyState();
+                    return;
+                }
+                
+                conversation.messages.forEach(msg => {
+                    if (msg.role === 'system') {
+                        this.addMessage('system', msg.content);
+                    } else if (msg.role === 'user') {
+                        this.addMessage('user', msg.content, 'U');
+                    } else if (msg.role === 'assistant') {
+                        this.addMessage('assistant', msg.content, '🤖');
+                    }
+                });
+            }
+            
+            generateConversationTitle(firstMessage) {
+                // Generate a title based on the first user message
+                const maxLength = 30;
+                let title = firstMessage.trim();
+                
+                if (title.length > maxLength) {
+                    title = title.substring(0, maxLength) + '...';
+                }
+                
+                return title || 'New Chat';
+            }
+            
+            async checkConnection() {
+                try {
+                    console.log('Checking Ollama connection...');
+                    const response = await fetch(`${this.ollamaUrl}/api/tags`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Available models:', data);
+                        this.availableModels = data.models || [];
+                        this.populateModelSelect();
+                        this.status.textContent = 'Connected';
+                        this.statusDot.classList.add('connected');
+                        
+                        if (this.availableModels.length === 0) {
+                            this.addSystemMessage('⚠️ No models found. Pull a model with: ollama pull mistral:7b');
+                        }
+                    } else {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error('Connection error:', error);
+                    this.status.textContent = 'Disconnected';
+                    this.statusDot.classList.remove('connected');
+                    this.addSystemMessage(`❌ Cannot connect to Ollama: ${error.message}. Make sure Ollama is running with: ollama serve`);
+                }
+            }
+            
+            populateModelSelect() {
+                this.modelSelect.innerHTML = '';
+                
+                if (this.availableModels.length === 0) {
+                    this.modelSelect.innerHTML = '<option value="">No models found</option>';
+                    return;
+                }
+                
+                this.availableModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.name;
+                    option.textContent = model.name;
+                    this.modelSelect.appendChild(option);
+                });
+                
+                // Set default model if available
+                const mistralModel = this.availableModels.find(m => m.name.includes('mistral'));
+                if (mistralModel) {
+                    this.model = mistralModel.name;
+                    this.modelSelect.value = this.model;
+                } else if (this.availableModels.length > 0) {
+                    this.model = this.availableModels[0].name;
+                    this.modelSelect.value = this.model;
+                }
+            }
+            
+            async refreshModels() {
+                this.modelSelect.innerHTML = '<option value="">Refreshing...</option>';
+                await this.checkConnection();
+            }
+            
+            addMessage(type, content, avatar) {
+                const wrapper = document.createElement('div');
+                wrapper.className = `message-wrapper ${type}`;
+                
+                if (type !== 'system') {
+                    const avatarDiv = document.createElement('div');
+                    avatarDiv.className = `avatar ${type}`;
+                    avatarDiv.textContent = avatar;
+                    
+                    const messageContent = document.createElement('div');
+                    messageContent.className = 'message-content';
+                    
+                    if (type === 'assistant') {
+                        // Format code blocks and inline code
+                        content = content.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+                        content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+                        content = content.replace(/\n/g, '<br>');
+                        messageContent.innerHTML = content;
+                    } else {
+                        messageContent.textContent = content;
+                    }
+                    
+                    if (type === 'user') {
+                        wrapper.appendChild(messageContent);
+                        wrapper.appendChild(avatarDiv);
+                    } else {
+                        wrapper.appendChild(avatarDiv);
+                        wrapper.appendChild(messageContent);
+                    }
+                } else {
+                    wrapper.innerHTML = `<div class="system-message">${content}</div>`;
+                }
+                
+                // Clear empty state if it exists
+                const emptyState = this.messages.querySelector('.empty-state');
+                if (emptyState) {
+                    emptyState.remove();
+                }
+                
+                this.messages.appendChild(wrapper);
+                this.messages.scrollTop = this.messages.scrollHeight;
+                
+                return wrapper;
+            }
+            
+            addSystemMessage(content) {
+                this.addMessage('system', content);
+                
+                // Add to current conversation
+                if (this.currentConversationId && this.conversations[this.currentConversationId]) {
+                    this.conversations[this.currentConversationId].messages.push({
+                        role: 'system',
+                        content: content,
+                        timestamp: new Date().toISOString()
+                    });
+                    this.autoSave();
+                }
+            }
+            
+            showTypingIndicator() {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'message-wrapper assistant';
+                wrapper.id = 'typing-indicator';
+                
+                wrapper.innerHTML = `
+                    <div class="avatar assistant">🤖</div>
+                    <div class="message-content">
+                        <div class="typing-indicator">
+                            <div class="typing-dots">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Clear empty state if it exists
+                const emptyState = this.messages.querySelector('.empty-state');
+                if (emptyState) {
+                    emptyState.remove();
+                }
+                
+                this.messages.appendChild(wrapper);
+                this.messages.scrollTop = this.messages.scrollHeight;
+            }
+            
+            hideTypingIndicator() {
+                const indicator = document.getElementById('typing-indicator');
+                if (indicator) {
+                    indicator.remove();
+                }
+            }
+            
+            async sendMessage() {
+                const message = this.userInput.value.trim();
+                if (!message || !this.model) {
+                    if (!this.model) {
+                        this.addSystemMessage('❌ No model selected. Please select a model first.');
+                    }
+                    return;
+                }
+                
+                // Ensure we have a current conversation
+                if (!this.currentConversationId) {
+                    this.newConversation();
+                }
+                
+                const conversation = this.conversations[this.currentConversationId];
+                
+                // Add user message
+                this.addMessage('user', message, 'U');
+                conversation.messages.push({
+                    role: 'user',
+                    content: message,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Update conversation title if this is the first user message
+                if (conversation.messages.filter(m => m.role === 'user').length === 1) {
+                    conversation.title = this.generateConversationTitle(message);
+                    this.renderConversationsList();
+                }
+                
+                this.userInput.value = '';
+                this.userInput.style.height = 'auto';
+                
+                // Disable input while processing
+                this.sendBtn.disabled = true;
+                this.showTypingIndicator();
+                
+                try {
+                    console.log(`Sending message to model: ${this.model}`);
+                    const response = await fetch(`${this.ollamaUrl}/api/generate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            model: this.model,
+                            prompt: message,
+                            stream: false,
+                            options: {
+                                temperature: 0.7,
+                                top_p: 0.9,
+                                top_k: 40
+                            }
+                        })
+                    });
+                    
+                    this.hideTypingIndicator();
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('API Error:', response.status, errorText);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Response:', data);
+                    
+                    if (data.response) {
+                        this.addMessage('assistant', data.response, '🤖');
+                        conversation.messages.push({
+                            role: 'assistant',
+                            content: data.response,
+                            timestamp: new Date().toISOString()
+                        });
+                        
+                        // Update conversation metadata and auto-save
+                        conversation.updatedAt = new Date().toISOString();
+                        this.autoSave();
+                        this.renderConversationsList();
+                    } else {
+                        throw new Error('Empty response from model');
+                    }
+                    
+                } catch (error) {
+                    console.error('Send message error:', error);
+                    this.hideTypingIndicator();
+                    this.addSystemMessage(`❌ Error: ${error.message}`);
+                } finally {
+                    this.sendBtn.disabled = false;
+                    this.userInput.focus();
+                }
+            }
+            
+            clearChat() {
+                if (this.currentConversationId && this.conversations[this.currentConversationId]) {
+                    this.conversations[this.currentConversationId].messages = [];
+                    this.conversations[this.currentConversationId].title = 'New Chat';
+                    this.renderMessages();
+                    this.renderConversationsList();
+                    this.autoSave();
+                    this.addSystemMessage('💬 Chat cleared');
+                }
+            }
+            
+            exportConversation() {
+                if (!this.currentConversationId || !this.conversations[this.currentConversationId]) {
+                    alert('No conversation to export!');
+                    return;
+                }
+                
+                const conversation = this.conversations[this.currentConversationId];
+                if (conversation.messages.length === 0) {
+                    alert('No messages to export!');
+                    return;
+                }
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `conversation_${conversation.title.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.json`;
+                
+                const conversationData = {
+                    metadata: {
+                        title: conversation.title,
+                        created: conversation.createdAt,
+                        updated: conversation.updatedAt,
+                        model: conversation.model || this.model,
+                        messageCount: conversation.messages.length
+                    },
+                    messages: conversation.messages
+                };
+                
+                // Create download link
+                const blob = new Blob([JSON.stringify(conversationData, null, 2)], {
+                    type: 'application/json'
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.addSystemMessage(`💾 Conversation exported as: ${filename}`);
+            }
+            
+            exportAllConversations() {
+                if (Object.keys(this.conversations).length === 0) {
+                    alert('No conversations to export!');
+                    return;
+                }
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `all_conversations_${timestamp}.json`;
+                
+                const exportData = {
+                    metadata: {
+                        exported: new Date().toISOString(),
+                        conversationCount: Object.keys(this.conversations).length,
+                        totalMessages: Object.values(this.conversations).reduce((sum, conv) => sum + conv.messages.length, 0)
+                    },
+                    conversations: this.conversations
+                };
+                
+                // Create download link
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                    type: 'application/json'
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.addSystemMessage(`💾 All conversations exported as: ${filename}`);
+            }
+        }
+        
+        // Initialize when page loads
+        let chat;
+        document.addEventListener('DOMContentLoaded', () => {
+            chat = new SecureOllamaChat();
+            // Make chat available globally for button clicks
+            window.chat = chat;
+        });
+        
+        // Security: Prevent any external requests
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string' && !url.startsWith('http://localhost:11434')) {
+                console.error('Blocked external request:', url);
+                return Promise.reject(new Error('External requests blocked for security'));
+            }
+            return originalFetch.apply(this, arguments);
+        };
+    </script>
+</body>
+</html>
