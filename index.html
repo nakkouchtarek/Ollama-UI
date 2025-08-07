@@ -558,7 +558,7 @@
     </div>
 
     <script>
-        class SecureOllamaChat {
+        class OllamaChat {
             constructor() {
                 this.messages = document.getElementById('messages');
                 this.userInput = document.getElementById('userInput');
@@ -1190,7 +1190,7 @@
         // Initialize when page loads
         let chat;
         document.addEventListener('DOMContentLoaded', () => {
-            chat = new SecureOllamaChat();
+            chat = new OllamaChat();
             // Make chat available globally for button clicks
             window.chat = chat;
         });
